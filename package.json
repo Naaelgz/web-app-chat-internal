@@ -1,0 +1,38 @@
+{
+  "name": "web-app-chat-internal",
+  "version": "1.0.0",
+  "description": "Aplikasi chat internal berbasis web untuk percakapan langsung antar pengguna.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Naaelgz/web-app-chat-internal.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Naaelgz/web-app-chat-internal/issues"
+  },
+  "homepage": "https://github.com/Naaelgz/web-app-chat-internal#readme",
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "ably": "^2.29.0",
+    "axios": "^1.20.0",
+    "next": "^16.3.6",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.6",
+    "typescript": "^6.0.3"
+  }
+}
