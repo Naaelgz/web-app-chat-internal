@@ -1,0 +1,67 @@
+# Akselera.Tech Internal Chat
+
+## Demo akun
+
+- Alice
+  - Email: alice@akselera.tech
+  - Password: password123
+- Bob
+  - Email: bob@akselera.tech
+  - Password: password123
+- Charlie
+  - Email: charlie@akselera.tech
+  - Password: password123
+
+## Stack
+
+- Next.js
+- React
+- TypeScript
+- Neon PostgreSQL dengan driver `@neondatabase/serverless` untuk akun, session, percakapan, pesan, dan presence
+- Ably WebSocket untuk notifikasi pesan, percakapan, dan status presence secara realtime
+- Cookie session `HttpOnly`; password demo disimpan dengan hash `scrypt`
+- LocalStorage hanya untuk preferensi tema
+
+## Alasan memilih stack
+
+Next.js dipilih karena sesuai requirement tugas dan menyediakan UI serta Route Handler dalam satu aplikasi. Neon PostgreSQL dipilih sebagai database relasional terkelola yang bisa diakses dari deployment serverless dan multi-instance. Ably menangani koneksi WebSocket/pub-sub tanpa server socket yang harus terus berjalan. Semua route chat memeriksa session dan membership sebelum mengembalikan atau mengubah data; client hanya menerima token Ably sementara dengan akses subscribe ke channel user miliknya.
+
+## Cara menjalankan lokal
+
+1. Buat project PostgreSQL di Neon.
+2. Salin connection string pooled dari Neon ke `DATABASE_URL` di file `.env.local`.
+3. Buat app dan API key di Ably, lalu simpan key server-side sebagai `ABLY_API_KEY` di `.env.local`. Key memerlukan capability publish dan subscribe pada channel `user:*`; jangan commit file ini.
+4. Jalankan `npm install`.
+5. Jalankan `npm run dev`.
+6. Buka http://localhost:3000.
+
+Schema dan akun demo dibuat otomatis pada request API pertama. Contoh format environment variable tersedia di `.env.example`. Gunakan connection string pooled untuk deployment serverless, dan atur `DATABASE_URL` serta `ABLY_API_KEY` yang sama di environment hosting. Jika Ably belum tersedia atau koneksinya putus, UI sementara memakai polling database.
+
+## Migrasi riwayat lama
+
+Setelah login, aplikasi memeriksa key riwayat lama `akselera-chat-data` di browser dan mengirim percakapan milik akun tersebut ke endpoint migrasi yang tervalidasi. Impor dapat diulang tanpa membuat pesan duplikat. Data browser lama tetap dipertahankan sebagai backup. Percakapan dengan participant yang tidak terdaftar (misalnya ID lama `u3`) sengaja dilewati dan tidak dipetakan ke akun lain.
+
+File SQLite lama `data/chat.sqlite`, jika ada, tidak dihapus. Pemeriksaan file lokal saat migrasi hanya menemukan dua pesan seed yang sudah tersedia di Neon; keduanya dideduplikasi, sehingga tidak ada pesan unik tambahan untuk diimpor dari file tersebut.
+
+## Struktur tabel
+
+- `users`: akun dan hash password
+- `sessions`: hash token session beserta waktu kedaluwarsa
+- `conversations`: metadata percakapan 1-on-1 dengan batas unique pair
+- `conversation_members`: pemetaan user ke percakapan untuk otorisasi
+- `messages`: pesan teks, pengirim, waktu, dan status terbaca
+- `presence`: waktu heartbeat terakhir tiap user
+
+## AI tools yang dipakai
+
+- GitHub Copilot
+
+## Hal yang belum selesai
+
+- `DATABASE_URL` Neon dan environment hosting perlu dikonfigurasi sebelum deployment.
+- `ABLY_API_KEY` perlu dikonfigurasi untuk mengaktifkan WebSocket realtime; tanpa key, polling tetap menjadi fallback.
+- Belum ada registrasi akun mandiri
+
+## Catatan
+
+Aplikasi ini dibuat untuk keperluan task internal dan fokus pada fitur chat dasar sesuai spesifikasi.
