@@ -68,6 +68,6 @@ Koneksi database dan query hanya berada di kode server (`lib/server` dan API Rou
 - Belum ada Registrasi mandiri.
 - Belum ada rangkaian test otomatis untuk alur autentikasi, hak akses percakapan, dan realtime.
 
-## AI tools dan instruksi proyek
+## AI tools 
 
 GitHub Copilot digunakan untuk pembuatan dan perbaikan proyek serta Claude digunakan untuk review proyek.
