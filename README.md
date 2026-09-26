@@ -10,7 +10,7 @@ Aplikasi chat internal berbasis web untuk percakapan langsung antar pengguna.
 ## Tech
 
 - **Next.js 16, React 19, TypeScript** untuk UI dan API Route Handler.
-- **Neon PostgreSQL** sebagai database terkelola dengan driver serverless yang cocok untuk API Next.js. Neon dipilih agar aplikasi mendapat PostgreSQL tanpa mengelola server database sendiri; dibanding Supabase, kebutuhan proyek ini hanya database sehingga layanan database terpisah lebih sederhana dan tidak membawa layanan tambahan yang tidak digunakan.
+- **Neon PostgreSQL** sebagai database terkelola dengan driver serverless yang cocok untuk API Next.js. Neon dipilih agar aplikasi mendapat PostgreSQL tanpa mengelola server database sendiri.
 - **Ably** untuk pengiriman event realtime. Ably mengelola koneksi dan distribusi event, sedangkan koneksi WebSocket yang terus terbuka tidak cocok dijalankan langsung pada fungsi serverless Vercel. Jika `ABLY_API_KEY` tidak diatur, aplikasi menggunakan polling database sebagai fallback.
 - **Vercel** adalah hosting yang disarankan karena dukungan Next.js langsung dan deployment terhubung dengan Git.
 
