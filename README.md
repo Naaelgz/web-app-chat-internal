@@ -5,7 +5,7 @@ Aplikasi chat internal berbasis web untuk percakapan langsung antar pengguna.
 ## Status dan URL aplikasi
 
 - URL lokal: http://localhost:3000 setelah aplikasi dijalankan.
-- URL publik: 
+- URL publik: https://web-app-chat-internal.vercel.app
 
 ## Tech
 
