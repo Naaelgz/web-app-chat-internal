@@ -47,9 +47,3 @@ SQLite di `data/` adalah artefak/riwayat lama, bukan database yang digunakan apl
 ## AI tools
 
 GitHub Copilot.
-
-## Belum selesai / batasan
-
-- Chat baru mendukung percakapan 1-on-1 dan pesan teks; grup, lampiran, edit, dan hapus pesan belum tersedia.
-- Realtime bergantung pada konfigurasi Ably; tanpa layanan itu, pembaruan memakai polling.
-- Migrasi riwayat browser melewati percakapan yang memiliki participant ID yang tidak dikenal; data lama tidak otomatis dipetakan ke akun lain.
