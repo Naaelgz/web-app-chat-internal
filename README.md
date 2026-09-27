@@ -5,18 +5,16 @@ Aplikasi chat internal berbasis web untuk percakapan langsung antar pengguna.
 ## Status dan URL aplikasi
 
 - URL lokal: http://localhost:3000 setelah aplikasi dijalankan.
-- URL publik: belum tersedia; aplikasi belum dikonfigurasi untuk deployment produksi.
+- URL publik: 
 
-## Teknologi
+## Tech
 
 - **Next.js 16, React 19, TypeScript** untuk UI dan API Route Handler.
-- **Neon PostgreSQL** sebagai database terkelola dan kompatibel dengan pola serverless.
-- **Ably** untuk pengiriman event realtime. Jika `ABLY_API_KEY` tidak diatur, aplikasi menggunakan polling database.
-- **Vercel** adalah target hosting yang disarankan karena dukungan Next.js langsung dan deployment terhubung dengan Git. Deployment belum dilakukan.
+- **Neon PostgreSQL** sebagai database terkelola dengan driver serverless yang cocok untuk API Next.js. Neon dipilih agar aplikasi mendapat PostgreSQL tanpa mengelola server database sendiri; dibanding Supabase, kebutuhan proyek ini hanya database sehingga layanan database terpisah lebih sederhana dan tidak membawa layanan tambahan yang tidak digunakan.
+- **Ably** untuk pengiriman event realtime. Ably mengelola koneksi dan distribusi event, sedangkan koneksi WebSocket yang terus terbuka tidak cocok dijalankan langsung pada fungsi serverless Vercel. Jika `ABLY_API_KEY` tidak diatur, aplikasi menggunakan polling database sebagai fallback.
+- **Vercel** adalah hosting yang disarankan karena dukungan Next.js langsung dan deployment terhubung dengan Git.
 
-## Paket gratis
-
-Untuk demo atau proyek kecil, layanan dapat dimulai dengan paket gratis Neon, Ably, dan Vercel Hobby. Neon menyediakan PostgreSQL terkelola, Ably menyediakan kuota realtime, dan Vercel menjalankan aplikasi Next.js serta deployment dari Git. Kuota, batas pemakaian, dan ketentuan kelayakan paket dapat berubah; periksa ketentuan masing-masing layanan sebelum deployment. Jika batas Ably tidak sesuai kebutuhan, aplikasi tetap dapat berjalan dengan polling.
+Untuk demo atau proyek kecil, dapat dimulai dengan Neon, Ably, dan Vercel. Neon menyediakan PostgreSQL terkelola, Ably menyediakan kuota realtime, dan Vercel menjalankan aplikasi Next.js serta deployment dari Git. Pemakaian kuota dibatasi dengan polling fallback setiap 60 detik, heartbeat presence setiap 30 detik, dan penghentian request berkala saat tab tersembunyi; saat tab kembali terlihat, data langsung diperbarui. Kuota, batas pemakaian, dan ketentuan kelayakan paket dapat berubah.
 
 ## Menjalankan secara lokal
 
@@ -48,8 +46,6 @@ Akun berikut dibuat otomatis saat database pertama kali diinisialisasi. Password
 | Bob | `bob@akselera.tech` | `password123` |
 | Charlie | `charlie@akselera.tech` | `password123` |
 
-Akun dan password ini hanya untuk demo. Jangan gunakan sebagai kredensial produksi.
-
 ## Struktur database
 
 Tabel dibuat otomatis oleh aplikasi saat API pertama kali mengakses database.
@@ -65,15 +61,12 @@ Tabel dibuat otomatis oleh aplikasi saat API pertama kali mengakses database.
 
 ## Keamanan akses data
 
-Koneksi database dan query hanya berada di kode server (`lib/server` dan API Route Handler); kredensial database tidak dikirim ke browser. Setiap endpoint data memvalidasi session dari cookie HttpOnly, lalu query percakapan dan pesannya membatasi hasil melalui keanggotaan `conversation_members` milik pengguna yang terautentikasi. Query menggunakan parameter SQL, bukan interpolasi input. `proxy.ts` mengarahkan permintaan halaman `/chat` tanpa cookie session ke `/login` sebagai lapisan awal; validasi otorisasi tetap dilakukan oleh API karena keberadaan cookie saja tidak membuktikan session masih valid.
+Koneksi database dan query hanya berada di kode server (`lib/server` dan API Route Handler); kredensial database tidak dikirim ke browser. Setiap endpoint data memvalidasi session dari cookie HttpOnly, lalu query percakapan dan pesannya membatasi hasil melalui `conversation_members` milik pengguna yang terautentikasi. Query menggunakan parameter SQL, bukan interpolasi input. `proxy.ts` mengarahkan permintaan halaman `/chat` tanpa cookie session ke `/login` sebagai lapisan awal; validasi tetap dilakukan oleh API karena keberadaan cookie saja tidak membuktikan session masih valid.
 
 ## Hal yang belum selesai
 
-- Deployment produksi belum dilakukan, sehingga URL publik belum tersedia.
-- Akun demo masih dibuat otomatis ketika database diinisialisasi; sebelum membuka aplikasi untuk penggunaan produksi, proses provisioning akun demo perlu dinonaktifkan atau diganti.
 - Belum ada rangkaian test otomatis untuk alur autentikasi, hak akses percakapan, dan realtime.
-- Perlu menetapkan pemantauan pemakaian dan batas layanan untuk paket hosting gratis sebelum penggunaan lebih luas.
 
 ## AI tools dan instruksi proyek
 
-GitHub Copilot digunakan sebagai asisten pengembangan. `AGENTS.md` berisi instruksi agen untuk repository, sedangkan `CLAUDE.md` merujuk ke instruksi yang sama; keduanya adalah file konfigurasi/instruksi, bukan bukti bahwa Claude digunakan sebagai tool.
+GitHub Copilot digunakan untuk pembuatan dan perbaikan proyek serta Claude digunakan untuk review proyek.

@@ -149,7 +149,7 @@ img {
 
 .brand-logo.header-logo {
   width: min(190px, 42vw);
-  max-height: 48px;
+  height: auto;
   object-fit: contain;
   object-position: left center;
 }
@@ -406,6 +406,28 @@ html[data-theme='dark'] .ghost-button {
   margin: 0;
   color: var(--text);
   font-size: 0.9rem;
+}
+
+.auth-mode-switch {
+  margin: 1rem 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.auth-mode-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.primary-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .demo-box {

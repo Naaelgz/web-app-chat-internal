@@ -19,7 +19,7 @@ type NeonGlobal = typeof globalThis & {
 
 const neonGlobal = globalThis as NeonGlobal;
 
-function hashPassword(password: string, salt: string) {
+export function hashPassword(password: string, salt: string) {
   return scryptSync(password, salt, 64).toString('hex');
 }
 

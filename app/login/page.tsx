@@ -11,14 +11,17 @@ import {
   subscribeTheme,
 } from '../../lib/chat-data';
 
-const darkLogo = '/logo/akselera-dark-cropped.png';
-const whiteLogo = '/logo/akselera-white-cropped.png';
+const darkLogo = '/logo/Akselera%20Tech%20dark%20logo.png';
+const whiteLogo = '/logo/Akselera%20Tech%20white%20logo.png';
 
 export default function LoginPage() {
   const router = useRouter();
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const theme = useSyncExternalStore(subscribeTheme, getThemeSnapshot, getServerThemeSnapshot);
 
   useEffect(() => {
@@ -40,24 +43,32 @@ export default function LoginPage() {
   const handleLogin = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
+    setIsSubmitting(true);
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(isRegistering ? '/api/auth/register' : '/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ name, email, password }),
       });
       const result = (await response.json()) as { error?: string };
 
       if (!response.ok) {
-        setError(result.error ?? 'Login gagal.');
+        setError(result.error ?? (isRegistering ? 'Registrasi gagal.' : 'Login gagal.'));
         return;
       }
 
       router.push('/chat');
     } catch {
       setError('Server tidak dapat dihubungi. Coba lagi.');
+    } finally {
+      setIsSubmitting(false);
     }
+  };
+
+  const toggleRegistration = () => {
+    setIsRegistering((current) => !current);
+    setError('');
   };
 
   return (
@@ -75,9 +86,25 @@ export default function LoginPage() {
       </header>
 
       <div className="login-card">
-        <h1>Masuk</h1>
+        <h1>{isRegistering ? 'Buat akun' : 'Masuk'}</h1>
 
         <form className="auth-form-simple" onSubmit={handleLogin}>
+          {isRegistering ? (
+            <label>
+              Nama
+              <input
+                type="text"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Nama lengkap"
+                autoComplete="name"
+                minLength={2}
+                maxLength={80}
+                required
+              />
+            </label>
+          ) : null}
+
           <label>
             Email
             <input
@@ -85,6 +112,9 @@ export default function LoginPage() {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="andi@contoh.id"
+              autoComplete="email"
+              maxLength={254}
+              required
             />
           </label>
 
@@ -94,16 +124,26 @@ export default function LoginPage() {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="•••••••"
+              placeholder={isRegistering ? 'Minimal 8 karakter' : 'Password'}
+              autoComplete={isRegistering ? 'new-password' : 'current-password'}
+              minLength={isRegistering ? 8 : undefined}
+              maxLength={256}
+              required
             />
           </label>
 
           {error ? <p className="error-message">{error}</p> : null}
 
-          <button className="primary-button" type="submit">
-            Masuk
+          <button className="primary-button" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Memproses...' : isRegistering ? 'Daftar' : 'Masuk'}
           </button>
         </form>
+        <p className="auth-mode-switch">
+          {isRegistering ? 'Sudah punya akun?' : 'Belum punya akun?'}{' '}
+          <button className="auth-mode-button" type="button" onClick={toggleRegistration}>
+            {isRegistering ? 'Masuk' : 'Daftar'}
+          </button>
+        </p>
       </div>
     </main>
   );
