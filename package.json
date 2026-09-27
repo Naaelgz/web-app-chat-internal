@@ -1,8 +1,7 @@
 {
   "name": "web-app-chat-internal",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Aplikasi chat internal berbasis web untuk percakapan langsung antar pengguna.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

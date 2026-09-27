@@ -15,8 +15,8 @@ import {
   type ChatThread,
 } from '../../lib/chat-data';
 
-const darkLogo = '/logo/akselera-dark-cropped.png';
-const whiteLogo = '/logo/akselera-white-cropped.png';
+const darkLogo = '/logo/Akselera%20Tech%20dark%20logo.png';
+const whiteLogo = '/logo/Akselera%20Tech%20white%20logo.png';
 const FALLBACK_POLL_INTERVAL = 60_000;
 const PRESENCE_HEARTBEAT_INTERVAL = 30_000;
 const dateTimeFormatter = new Intl.DateTimeFormat('id-ID', {
@@ -339,7 +339,7 @@ export default function ChatPage() {
         setContacts(result.users);
       }
     }
-      if (isContactPickerOpen) setContactSearchQuery('');
+    if (isContactPickerOpen) setContactSearchQuery('');
     setIsContactPickerOpen((isOpen) => !isOpen);
   };
 
