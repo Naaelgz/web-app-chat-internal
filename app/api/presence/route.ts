@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     [user.id],
   );
   const lastSeen = currentPresence.rows[0]?.last_seen_at;
-  const wasOnline = Boolean(lastSeen && Date.now() - new Date(lastSeen).getTime() < 15_000);
+  const wasOnline = Boolean(lastSeen && Date.now() - new Date(lastSeen).getTime() < 75_000);
 
   if (isOnline) {
     await database.query(

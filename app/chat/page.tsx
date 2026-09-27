@@ -2,35 +2,91 @@
 
 import Image from 'next/image';
 import * as Ably from 'ably';
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import ThemeToggle from '../../components/theme-toggle';
-import { getTheme, setTheme, type AccountUser, type ChatThread } from '../../lib/chat-data';
+import {
+  getServerThemeSnapshot,
+  getThemeSnapshot,
+  setTheme,
+  subscribeTheme,
+  type AccountUser,
+  type ChatSummary,
+  type ChatThread,
+} from '../../lib/chat-data';
 
-const darkLogo = '/logo/Akselera Tech dark logo.png';
-const whiteLogo = '/logo/Akselera Tech white logo.png';
+const darkLogo = '/logo/akselera-dark-cropped.png';
+const whiteLogo = '/logo/akselera-white-cropped.png';
+const FALLBACK_POLL_INTERVAL = 60_000;
+const PRESENCE_HEARTBEAT_INTERVAL = 30_000;
+const dateTimeFormatter = new Intl.DateTimeFormat('id-ID', {
+  hour: '2-digit',
+  minute: '2-digit',
+});
+const weekdayFormatter = new Intl.DateTimeFormat('id-ID', { weekday: 'long' });
+const fullDateFormatter = new Intl.DateTimeFormat('id-ID', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+});
 
-async function loadChats(activeChatId?: string): Promise<ChatThread[] | null> {
-  const query = activeChatId ? `?active=${encodeURIComponent(activeChatId)}` : '';
-  const response = await fetch(`/api/chats${query}`, { cache: 'no-store' });
+function localDateKey(value: string | Date) {
+  const date = new Date(value);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function getDateLabel(value: string | Date, includeToday = false) {
+  const date = new Date(value);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  if (localDateKey(date) === localDateKey(today)) {
+    return includeToday ? 'Hari ini' : dateTimeFormatter.format(date);
+  }
+  if (localDateKey(date) === localDateKey(yesterday)) return 'Kemarin';
+
+  const ageInDays = Math.floor(
+    (new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime() -
+      new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) /
+      86_400_000,
+  );
+  return ageInDays < 7 ? weekdayFormatter.format(date) : fullDateFormatter.format(date);
+}
+
+async function loadChats(): Promise<ChatSummary[] | null> {
+  const response = await fetch('/api/chats', { cache: 'no-store' });
   if (!response.ok) return null;
-  const result = (await response.json()) as { chats: ChatThread[] };
+  const result = (await response.json()) as { chats: ChatSummary[] };
   return result.chats;
+}
+
+async function loadChat(chatId: string, markRead = false): Promise<ChatThread | null> {
+  const query = markRead ? '?markRead=true' : '';
+  const response = await fetch(`/api/chats/${encodeURIComponent(chatId)}${query}`, { cache: 'no-store' });
+  if (!response.ok) return null;
+  const result = (await response.json()) as { chat: ChatThread };
+  return result.chat;
 }
 
 export default function ChatPage() {
   const router = useRouter();
   const [session, setSession] = useState<AccountUser | null>(null);
-  const [chats, setChats] = useState<ChatThread[]>([]);
+  const [chats, setChats] = useState<ChatSummary[]>([]);
+  const [activeChat, setActiveChat] = useState<ChatThread | null>(null);
   const [contacts, setContacts] = useState<AccountUser[]>([]);
+  const [contactSearchQuery, setContactSearchQuery] = useState('');
   const [activeChatId, setActiveChatId] = useState('');
   const [messageText, setMessageText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isContactPickerOpen, setIsContactPickerOpen] = useState(false);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
-  const [theme, setThemeState] = useState<'light' | 'dark'>('light');
+  const theme = useSyncExternalStore(subscribeTheme, getThemeSnapshot, getServerThemeSnapshot);
   const activeChatIdRef = useRef(activeChatId);
-  activeChatIdRef.current = activeChatId;
+
+  useEffect(() => {
+    activeChatIdRef.current = activeChatId;
+  }, [activeChatId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,28 +104,10 @@ export default function ChatPage() {
 
         setSession(result.user);
 
-        const legacyHistory = localStorage.getItem('akselera-chat-data');
-        if (legacyHistory) {
-          try {
-            const legacyChats = JSON.parse(legacyHistory) as unknown;
-            await fetch('/api/migration/browser-history', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ chats: legacyChats }),
-            });
-          } catch {
-            // Leave the legacy browser backup untouched if migration is unavailable.
-          }
-        }
-
         const initialChats = await loadChats();
         if (!initialChats || cancelled) return;
         setChats(initialChats);
         setActiveChatId(initialChats[0]?.id ?? '');
-
-        const currentTheme = getTheme();
-        setThemeState(currentTheme);
-        document.documentElement.dataset.theme = currentTheme;
       } catch {
         router.replace('/login');
       }
@@ -87,7 +125,7 @@ export default function ChatPage() {
     let cancelled = false;
     const refreshChats = async () => {
       try {
-        const nextChats = await loadChats(activeChatId || undefined);
+        const nextChats = await loadChats();
         if (nextChats && !cancelled) setChats(nextChats);
       } catch {
         if (!cancelled) router.replace('/login');
@@ -95,10 +133,64 @@ export default function ChatPage() {
     };
 
     void refreshChats();
-    const interval = window.setInterval(refreshChats, realtimeConnected ? 30_000 : 3_000);
+    if (realtimeConnected) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void refreshChats();
+    };
+    const interval = window.setInterval(refreshWhenVisible, FALLBACK_POLL_INTERVAL);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [realtimeConnected, router, session]);
+
+  useEffect(() => {
+    if (!session || !activeChatId) {
+      return;
+    }
+
+    let cancelled = false;
+    let firstRequest = true;
+    const refreshActiveChat = async () => {
+      try {
+        const nextChat = await loadChat(activeChatId, firstRequest);
+        firstRequest = false;
+        if (nextChat && !cancelled && activeChatIdRef.current === activeChatId) {
+          setActiveChat(nextChat);
+          setChats((currentChats) =>
+            currentChats.map((chat) =>
+              chat.id === activeChatId ? { ...chat, unreadCount: 0 } : chat,
+            ),
+          );
+        }
+      } catch {
+        if (!cancelled) router.replace('/login');
+      }
+    };
+
+    void refreshActiveChat();
+    if (realtimeConnected) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void refreshActiveChat();
+    };
+    const interval = window.setInterval(refreshWhenVisible, FALLBACK_POLL_INTERVAL);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
   }, [activeChatId, realtimeConnected, router, session]);
 
@@ -121,10 +213,21 @@ export default function ChatPage() {
           echoMessages: false,
         });
         const channel = realtime.channels.get(`user:${session.id}`);
-        const refreshOnEvent = () => {
-          void loadChats(activeChatIdRef.current || undefined).then((nextChats) => {
-            if (nextChats) setChats(nextChats);
-          });
+        const refreshOnEvent = async (event: Ably.Message) => {
+          const currentChatId = activeChatIdRef.current;
+          const incomingChatId = (event.data as { chatId?: string } | undefined)?.chatId;
+          const currentChatNeedsRead = Boolean(currentChatId && incomingChatId === currentChatId);
+
+          if (currentChatId && currentChatNeedsRead) {
+            const nextChat = await loadChat(currentChatId, true);
+            if (nextChat && activeChatIdRef.current === currentChatId) setActiveChat(nextChat);
+          } else if (currentChatId) {
+            const nextChat = await loadChat(currentChatId);
+            if (nextChat && activeChatIdRef.current === currentChatId) setActiveChat(nextChat);
+          }
+
+          const nextChats = await loadChats();
+          if (nextChats) setChats(nextChats);
         };
 
         channel.subscribe('chat.updated', refreshOnEvent);
@@ -159,43 +262,55 @@ export default function ChatPage() {
         body: JSON.stringify({ online }),
       });
     };
-    const updatePresence = () => void sendPresence(navigator.onLine);
+    const updatePresence = () => {
+      if (document.visibilityState === 'visible') void sendPresence(navigator.onLine);
+    };
 
     updatePresence();
-    const interval = window.setInterval(updatePresence, 5_000);
+    const interval = window.setInterval(updatePresence, PRESENCE_HEARTBEAT_INTERVAL);
     window.addEventListener('online', updatePresence);
     window.addEventListener('offline', updatePresence);
+    document.addEventListener('visibilitychange', updatePresence);
 
     return () => {
       window.clearInterval(interval);
       window.removeEventListener('online', updatePresence);
       window.removeEventListener('offline', updatePresence);
+      document.removeEventListener('visibilitychange', updatePresence);
       void sendPresence(false);
     };
   }, [session]);
 
   const toggleTheme = () => {
     const nextTheme = theme === 'light' ? 'dark' : 'light';
-    setThemeState(nextTheme);
     setTheme(nextTheme);
-    document.documentElement.dataset.theme = nextTheme;
   };
 
   const filteredChats = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
     if (!query) return chats;
     return chats.filter((chat) =>
-      [chat.contact.name, ...chat.messages.map((message) => message.text)]
+      [chat.contact.name, chat.lastMessage?.text ?? '']
         .join(' ')
         .toLocaleLowerCase()
         .includes(query),
     );
   }, [chats, searchQuery]);
 
-  const activeChat = chats.find((chat) => chat.id === activeChatId) ?? chats[0] ?? null;
+  const filteredContacts = useMemo(() => {
+    const query = contactSearchQuery.trim().toLocaleLowerCase();
+    if (!query) return contacts;
+    return contacts.filter((contact) =>
+      `${contact.name} ${contact.email}`.toLocaleLowerCase().includes(query),
+    );
+  }, [contactSearchQuery, contacts]);
 
   const handleSelectChat = (chatId: string) => {
+    setActiveChat(null);
     setActiveChatId(chatId);
+    setChats((currentChats) =>
+      currentChats.map((chat) => (chat.id === chatId ? { ...chat, unreadCount: 0 } : chat)),
+    );
   };
 
   const handleSendMessage = async (event: FormEvent) => {
@@ -211,8 +326,9 @@ export default function ChatPage() {
     if (!response.ok) return;
 
     setMessageText('');
-    const nextChats = await loadChats(activeChat.id);
+    const [nextChats, nextChat] = await Promise.all([loadChats(), loadChat(activeChat.id)]);
     if (nextChats) setChats(nextChats);
+    if (nextChat) setActiveChat(nextChat);
   };
 
   const openContactPicker = async () => {
@@ -223,6 +339,7 @@ export default function ChatPage() {
         setContacts(result.users);
       }
     }
+      if (isContactPickerOpen) setContactSearchQuery('');
     setIsContactPickerOpen((isOpen) => !isOpen);
   };
 
@@ -234,11 +351,13 @@ export default function ChatPage() {
     });
     if (!response.ok) return;
 
-    const result = (await response.json()) as { chat: ChatThread };
+    const result = (await response.json()) as { chat: ChatSummary };
+    if (!result.chat) return;
+    setActiveChat(null);
     setActiveChatId(result.chat.id);
     setSearchQuery('');
     setIsContactPickerOpen(false);
-    const nextChats = await loadChats(result.chat.id);
+    const nextChats = await loadChats();
     if (nextChats) setChats(nextChats);
   };
 
@@ -256,8 +375,8 @@ export default function ChatPage() {
           src={theme === 'light' ? darkLogo : whiteLogo}
           alt="Akselera Tech logo"
           className="brand-logo header-logo"
-          width={150}
-          height={32}
+          width={190}
+          height={52}
           priority
         />
         <div className="header-actions">
@@ -309,24 +428,40 @@ export default function ChatPage() {
           </button>
           {isContactPickerOpen ? (
             <div className="chat-contact-menu" aria-label="Pilih kontak untuk chat baru">
-              {contacts.map((contact) => (
-                <button key={contact.id} type="button" onClick={() => void handleNewChat(contact.id)}>
-                  <span className="avatar">{contact.name.charAt(0)}</span>
-                  <span>{contact.name}</span>
-                </button>
-              ))}
+              <input
+                className="contact-search-input"
+                type="search"
+                aria-label="Cari kontak"
+                placeholder="Cari nama atau email"
+                value={contactSearchQuery}
+                onChange={(event) => setContactSearchQuery(event.target.value)}
+              />
+              <div className="chat-contact-options">
+                {filteredContacts.map((contact) => (
+                  <button key={contact.id} type="button" onClick={() => void handleNewChat(contact.id)}>
+                    <span className="avatar">{contact.name.charAt(0)}</span>
+                    <span className="chat-contact-copy">
+                      <strong>{contact.name}</strong>
+                      <small>{contact.email}</small>
+                    </span>
+                  </button>
+                ))}
+                {filteredContacts.length === 0 ? (
+                  <p className="chat-list-empty">Kontak tidak ditemukan</p>
+                ) : null}
+              </div>
             </div>
           ) : null}
         </div>
 
         <div className="chat-list">
           {filteredChats.map((chat) => {
-            const lastMessage = chat.messages[chat.messages.length - 1];
+            const lastMessage = chat.lastMessage;
             return (
               <button
                 type="button"
                 key={chat.id}
-                className={`chat-item ${chat.id === activeChat?.id ? 'active' : ''}`}
+                className={`chat-item ${chat.id === activeChatId ? 'active' : ''}`}
                 onClick={() => handleSelectChat(chat.id)}
               >
                 <div className="avatar">{chat.contact.name.charAt(0)}</div>
@@ -336,10 +471,7 @@ export default function ChatPage() {
                     <div className="chat-item-meta">
                       {lastMessage ? (
                         <time className="chat-item-time" dateTime={lastMessage.createdAt}>
-                          {new Date(lastMessage.createdAt).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {getDateLabel(lastMessage.createdAt)}
                         </time>
                       ) : null}
                       {chat.unreadCount > 0 ? (
@@ -363,7 +495,7 @@ export default function ChatPage() {
       </aside>
 
       <section className="chat-panel">
-        {activeChat ? (
+        {activeChat && activeChat.id === activeChatId ? (
           <>
             <header className="chat-header">
               <div className="chat-person">
@@ -378,17 +510,23 @@ export default function ChatPage() {
             </header>
 
             <div className="messages-panel">
-              {activeChat.messages.map((message) => {
+              {activeChat.messages.map((message, index) => {
                 const isMe = message.senderId === session.id;
+                const isFirstMessageOfDay =
+                  index === 0 ||
+                  localDateKey(activeChat.messages[index - 1].createdAt) !==
+                    localDateKey(message.createdAt);
                 return (
-                  <div key={message.id} className={`message-bubble ${isMe ? 'mine' : 'theirs'}`}>
-                    <span>{message.text}</span>
-                    <small>
-                      {new Date(message.createdAt).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </small>
+                  <div key={message.id} className="message-day-group">
+                    {isFirstMessageOfDay ? (
+                      <div className="message-day-divider">
+                        <span>{getDateLabel(message.createdAt, true)}</span>
+                      </div>
+                    ) : null}
+                    <div className={`message-bubble ${isMe ? 'mine' : 'theirs'}`}>
+                      <span>{message.text}</span>
+                      <small>{dateTimeFormatter.format(new Date(message.createdAt))}</small>
+                    </div>
                   </div>
                 );
               })}
@@ -408,8 +546,8 @@ export default function ChatPage() {
           </>
         ) : (
           <div className="empty-state">
-            <h2>Belum ada chat aktif</h2>
-            <p>Mulai percakapan baru untuk menulis ke tim.</p>
+            <h2>{activeChatId ? 'Memuat percakapan...' : 'Belum ada chat aktif'}</h2>
+            {!activeChatId ? <p>Mulai percakapan baru untuk menulis ke tim.</p> : null}
           </div>
         )}
       </section>

@@ -5,13 +5,14 @@ import { publishUserEvent } from '../../../../lib/server/realtime';
 
 export const runtime = 'nodejs';
 
-export async function GET(_request: Request, { params }: { params: Promise<{ chatId: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ chatId: string }> }) {
   const user = await getAuthenticatedUser();
   if (!user) return unauthorizedResponse();
 
   const { chatId } = await params;
   const database = await getDatabase();
-  const chat = await getConversationForUser(database, chatId, user.id, true);
+  const markRead = new URL(request.url).searchParams.get('markRead') === 'true';
+  const chat = await getConversationForUser(database, chatId, user.id, markRead);
   if (!chat) return Response.json({ error: 'Chat tidak ditemukan.' }, { status: 404 });
   return Response.json({ chat });
 }

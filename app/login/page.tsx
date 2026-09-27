@@ -1,30 +1,31 @@
 'use client';
 
 import Image from 'next/image';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import ThemeToggle from '../../components/theme-toggle';
-import { getTheme, setTheme } from '../../lib/chat-data';
+import {
+  getServerThemeSnapshot,
+  getThemeSnapshot,
+  setTheme,
+  subscribeTheme,
+} from '../../lib/chat-data';
 
-const darkLogo = '/logo/Akselera Tech dark logo.png';
-const whiteLogo = '/logo/Akselera Tech white logo.png';
+const darkLogo = '/logo/akselera-dark-cropped.png';
+const whiteLogo = '/logo/akselera-white-cropped.png';
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [theme, setThemeState] = useState<'light' | 'dark'>('light');
+  const theme = useSyncExternalStore(subscribeTheme, getThemeSnapshot, getServerThemeSnapshot);
 
   useEffect(() => {
     let cancelled = false;
     fetch('/api/auth/session', { cache: 'no-store' }).then((response) => {
       if (response.ok && !cancelled) router.replace('/chat');
     });
-
-    const currentTheme = getTheme();
-    setThemeState(currentTheme);
-    document.documentElement.dataset.theme = currentTheme;
 
     return () => {
       cancelled = true;
@@ -33,9 +34,7 @@ export default function LoginPage() {
 
   const toggleTheme = () => {
     const nextTheme = theme === 'light' ? 'dark' : 'light';
-    setThemeState(nextTheme);
     setTheme(nextTheme);
-    document.documentElement.dataset.theme = nextTheme;
   };
 
   const handleLogin = async (event: FormEvent) => {
@@ -68,8 +67,8 @@ export default function LoginPage() {
           src={theme === 'light' ? darkLogo : whiteLogo}
           alt="Akselera Tech logo"
           className="brand-logo header-logo"
-          width={150}
-          height={32}
+          width={190}
+          height={52}
           priority
         />
         <ThemeToggle theme={theme} onToggle={toggleTheme} />

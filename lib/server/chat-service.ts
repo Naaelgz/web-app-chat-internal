@@ -20,6 +20,10 @@ export type ChatRecord = {
   online: boolean;
 };
 
+export type ChatSummaryRecord = Omit<ChatRecord, 'messages'> & {
+  lastMessage: ChatMessageRecord | null;
+};
+
 type ContactRow = PublicUser & { updated_at: Date | string };
 
 export async function getConversationForUser(
@@ -67,7 +71,7 @@ export async function getConversationForUser(
     database.query<{ online: boolean }>(
       `SELECT EXISTS (
          SELECT 1 FROM presence
-         WHERE user_id = $1 AND last_seen_at > NOW() - INTERVAL '15 seconds'
+         WHERE user_id = $1 AND last_seen_at > NOW() - INTERVAL '75 seconds'
        ) AS online`,
       [contactRow.id],
     ),
@@ -90,22 +94,69 @@ export async function getConversationForUser(
   };
 }
 
-export async function listConversationsForUser(database: Pool, userId: string, activeId?: string) {
-  if (activeId) await getConversationForUser(database, activeId, userId, true);
-
-  const conversations = await database.query<{ id: string }>(
-    `SELECT conversations.id
-     FROM conversations
-     JOIN conversation_members ON conversation_members.conversation_id = conversations.id
-     WHERE conversation_members.user_id = $1
+export async function listConversationSummariesForUser(database: Pool, userId: string) {
+  const result = await database.query<{
+    id: string;
+    updated_at: Date | string;
+    contact_id: string;
+    contact_name: string;
+    contact_email: string;
+    last_message_id: string | null;
+    last_message_sender_id: string | null;
+    last_message_body: string | null;
+    last_message_created_at: Date | string | null;
+    last_message_is_read: boolean | null;
+    unread_count: string;
+    online: boolean;
+  }>(
+    `SELECT conversations.id, conversations.updated_at,
+            contact.id AS contact_id, contact.name AS contact_name, contact.email AS contact_email,
+            latest.id AS last_message_id, latest.sender_id AS last_message_sender_id,
+            latest.body AS last_message_body, latest.created_at AS last_message_created_at,
+            latest.is_read AS last_message_is_read,
+            unread.count AS unread_count,
+            COALESCE(presence.last_seen_at > NOW() - INTERVAL '75 seconds', FALSE) AS online
+     FROM conversation_members mine
+     JOIN conversations ON conversations.id = mine.conversation_id
+     JOIN conversation_members other
+       ON other.conversation_id = conversations.id AND other.user_id != mine.user_id
+     JOIN users contact ON contact.id = other.user_id
+     LEFT JOIN LATERAL (
+       SELECT id, sender_id, body, created_at, is_read
+       FROM messages
+       WHERE conversation_id = conversations.id
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1
+     ) latest ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::text AS count
+       FROM messages
+       WHERE conversation_id = conversations.id
+         AND sender_id != mine.user_id AND is_read = FALSE
+     ) unread ON TRUE
+     LEFT JOIN presence ON presence.user_id = contact.id
+     WHERE mine.user_id = $1
      ORDER BY conversations.updated_at DESC`,
     [userId],
   );
 
-  const chatResults = await Promise.all(
-    conversations.rows.map(({ id }) => getConversationForUser(database, id, userId)),
-  );
-  return chatResults.filter((conversation): conversation is ChatRecord => conversation !== null);
+  return result.rows.map((row) => ({
+    id: row.id,
+    participants: [userId, row.contact_id],
+    updatedAt: new Date(row.updated_at).toISOString(),
+    contact: { id: row.contact_id, name: row.contact_name, email: row.contact_email },
+    unreadCount: Number(row.unread_count),
+    online: row.online,
+    lastMessage: row.last_message_id
+      ? {
+          id: row.last_message_id,
+          senderId: row.last_message_sender_id!,
+          text: row.last_message_body!,
+          createdAt: new Date(row.last_message_created_at!).toISOString(),
+          isRead: row.last_message_is_read!,
+        }
+      : null,
+  } satisfies ChatSummaryRecord));
 }
 
 export async function createOrGetConversation(database: Pool, userId: string, otherUserId: string) {

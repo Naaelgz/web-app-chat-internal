@@ -1,17 +1,16 @@
 import { getAuthenticatedUser, unauthorizedResponse } from '../../../lib/server/auth';
-import { createOrGetConversation, listConversationsForUser } from '../../../lib/server/chat-service';
+import { createOrGetConversation, listConversationSummariesForUser } from '../../../lib/server/chat-service';
 import { getDatabase } from '../../../lib/server/database';
 import { publishUserEvent } from '../../../lib/server/realtime';
 
 export const runtime = 'nodejs';
 
-export async function GET(request: Request) {
+export async function GET() {
   const user = await getAuthenticatedUser();
   if (!user) return unauthorizedResponse();
 
-  const activeId = new URL(request.url).searchParams.get('active') ?? undefined;
   const database = await getDatabase();
-  const chats = await listConversationsForUser(database, user.id, activeId);
+  const chats = await listConversationSummariesForUser(database, user.id);
   return Response.json({ chats });
 }
 
@@ -36,7 +35,7 @@ export async function POST(request: Request) {
   if (otherUser.rows.length === 0) return Response.json({ error: 'User tidak ditemukan.' }, { status: 404 });
 
   const conversationId = await createOrGetConversation(database, user.id, otherUserId);
-  const chats = await listConversationsForUser(database, user.id, conversationId);
+  const chats = await listConversationSummariesForUser(database, user.id);
   await publishUserEvent([user.id, otherUserId], { type: 'conversation.updated', chatId: conversationId });
   return Response.json({ chat: chats.find((chat) => chat.id === conversationId) }, { status: 201 });
 }
